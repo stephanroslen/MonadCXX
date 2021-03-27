@@ -1,0 +1,82 @@
+variables:
+  BUILDCONTAINER: $CI_REGISTRY_IMAGE/buildcontainer
+
+stages:
+  - prepare-build-container
+  - build
+  - test
+
+.login: &login
+  - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+
+prepare-build-container:
+  stage: prepare-build-container
+  image: docker:20.10.5
+  services:
+    - docker:20.10.5-dind
+  script:
+    - *login
+    - cd buildcontainer
+    - docker build --pull -f Dockerfile -t $BUILDCONTAINER:latest -t $BUILDCONTAINER:$CI_COMMIT_SHA .
+    - docker push --all-tags $BUILDCONTAINER
+  only:
+    changes:
+      - buildcontainer/Dockerfile
+  interruptible: true
+
+.build: &build
+  stage: build
+  image: $BUILDCONTAINER
+  script:
+    - mkdir $BUILDDIR
+    - cd $BUILDDIR
+    - cmake -G Ninja -DCMAKE_BUILD_TYPE=$BUILDTYPE -DBUILD_TESTS=ON ..
+    - ninja
+  artifacts:
+    paths:
+      - $BUILDDIR
+    expire_in: 30 minutes
+  interruptible: true
+
+.vardebug: &vardebug
+  variables:
+    BUILDDIR: cmake-build-debug
+    BUILDTYPE: Debug
+
+.varreldeb: &varreldeb
+  variables:
+    BUILDDIR: cmake-build-reldeb
+    BUILDTYPE: RelWithDebInfo
+
+build:debug:
+  <<: *vardebug
+  <<: *build
+
+build:reldeb:
+  <<: *varreldeb
+  <<: *build
+
+.test: &test
+  stage: test
+  image: $BUILDCONTAINER
+  script:
+    - cd $BUILDDIR
+    - ctest -j $(nproc) --progress
+  artifacts:
+    reports:
+      junit:
+        - $BUILDDIR/tests/*.xml
+    expire_in: 30 minutes
+  interruptible: true
+
+test:debug:
+  dependencies:
+    - build:debug
+  <<: *vardebug
+  <<: *test
+
+test:reldeb:
+  dependencies:
+    - build:reldeb
+  <<: *varreldeb
+  <<: *test
