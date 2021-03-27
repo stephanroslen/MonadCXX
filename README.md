@@ -2,6 +2,20 @@
 
 ## build
 
+### CMake
+
+```sh
+$ mkdir build
+$ cd build
+$ cmake ..
+$ make
+$ make install
+```
+
+Build additional tests with the cmake parameters `-DDBUILD_TESTS=ON`.
+
+### Nix
+
 In order to just compile the tests and build the package, run:
 
 ```sh
