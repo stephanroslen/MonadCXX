@@ -49,4 +49,30 @@ TEST(StateMonad, Join) {
   EXPECT_EQ(mrejoined.data(in).stateDesc, in);
 }
 
+TEST(StateMonad, FMap) {
+  const SomeStateDesc in{};
+  const auto mout{SomeState::mfmap([](int i) { return std::to_string(i); })(SomeState::mreturn(3)).data(in)};
+  EXPECT_EQ(mout.result, "3");
+  EXPECT_EQ(mout.stateDesc, in);
+}
+
+TEST(StateMonad, Kleisli) {
+  const SomeStateDesc in{"Whatever", 23};
+  const auto combined{SomeState::mkleisli(
+      [](Empty) {
+        return SomeState::TypeConstructor<int>{[](SomeStateDesc val) {
+          int age = val.age;
+          return SomeState::ResultStateDescType<int>{age, std::move(val)};
+        }};
+      },
+      [](int a) {
+        return SomeState::TypeConstructor<Empty>{[a](SomeStateDesc val) {
+          val.name = std::to_string(a);
+          return SomeState::ResultStateDescType<Empty>{Empty{}, std::move(val)};
+        }};
+      })};
+  const SomeStateDesc expected{"23", 23};
+  EXPECT_EQ(SomeState::mreturn(Empty{}).mbind(combined).data(in).stateDesc, expected);
+}
+
 } // namespace MonadCXX::tests
